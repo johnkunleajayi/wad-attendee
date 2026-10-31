@@ -55,19 +55,17 @@ export async function renderPoster(canvas:HTMLCanvasElement,options:PosterOption
   text(ctx,EVENT.year,110,square?174:235,square?20:24,B.white,400,'Trophy');
   // An editorial masthead balances the official mark rather than becoming a tiny caption.
   const themeX=square?664:650,themeW=365;
-  const words=EVENT.themeHeadline.toUpperCase().split(/\s+/),lead=words.shift()||'',vision=(words.pop()||'').replace(/[.!:]$/,'')+'.',middle=words.join(' ');
-  displayWord(ctx,lead,themeX,square?48:65,square?22:24,5,'#EDD18A',themeW,500);
-  displayWord(ctx,middle,themeX,square?104:130,square?14:16,2.5,'#DABF76',58,500);
-  text(ctx,vision,themeX+(square?54:63),square?84:107,square?39:48,'#FFFCED',400,'Trophy');
+  displayWord(ctx,'BEYOND THE',themeX,square?57:73,square?23:25,1.8,'#EDD18A',themeW,600);
+  text(ctx,'VISION.',themeX,square?88:111,square?39:48,'#FFFCED',400,'Trophy');
   textBox(ctx,EVENT.themeDetail,themeX,square?150:184,themeW,square?62:65,square?16:18,14,'#D9E3CE',400,3);
   const themeRule=ctx.createLinearGradient(themeX,0,themeX+themeW,0);themeRule.addColorStop(0,'#F29E07AA');themeRule.addColorStop(1,'#F5CB0300');ctx.fillStyle=themeRule;ctx.fillRect(themeX,square?228:263,themeW,1);
   // Signature announcement: tracked gold lead-in and optically set ivory/champagne capitals.
-  const headlineY=square?250:story?354:328,headlineSize=square?110:124;
+  const headlineY=square?250:story?354:328,headlineSize=square?94:story?106:108;
   displayWord(ctx,"I’M",80,headlineY-44,square?22:24,2.6,B.gold,140,600);
   ctx.fillStyle=B.red;ctx.fillRect(78,headlineY-45,2,square?20:22);
   const enamel=ctx.createLinearGradient(0,headlineY,0,headlineY+headlineSize*.85);
   enamel.addColorStop(0,'#FFFEF4');enamel.addColorStop(.33,'#FFFFFF');enamel.addColorStop(.66,'#F4F5E8');enamel.addColorStop(.87,'#E3E9D9');enamel.addColorStop(1,'#D3B96F');
-  const announcementWidth=displayWord(ctx,'ATTENDING',74,headlineY,headlineSize,1.2,enamel,900);
+  const announcementWidth=displayWord(ctx,'ATTENDING',74,headlineY,headlineSize,1.2,enamel,790);
   const signatureRule=ctx.createLinearGradient(78,0,78+announcementWidth*.28,0);signatureRule.addColorStop(0,B.gold);signatureRule.addColorStop(1,'#F5CB0300');ctx.fillStyle=signatureRule;ctx.fillRect(78,headlineY+headlineSize*.8+14,announcementWidth*.28,2);
   const frame=portraitFrame(format),plate=nameplateFrame(format,Number(!!p.title.trim())+Number(!!p.organization.trim()));
   // Broad gold arch separates the portrait from the green artwork; the photo is never stretched.
@@ -107,11 +105,43 @@ export async function renderPoster(canvas:HTMLCanvasElement,options:PosterOption
   ctx.lineTo(x+24,y+plate.h);ctx.quadraticCurveTo(x,y+plate.h,x,y+plate.h-24);ctx.lineTo(x,y+24);ctx.quadraticCurveTo(x,y,x+24,y);
   const paper=ctx.createLinearGradient(x,y,x+300,y+plate.h);paper.addColorStop(0,'#FFFDF5');paper.addColorStop(.5,'#F6F3E5');paper.addColorStop(1,'#EAE7D7');ctx.fillStyle=paper;ctx.fill();ctx.restore();
   ctx.strokeStyle='#FFFDF1C0';ctx.lineWidth=1.4;ctx.stroke();
-  const tx=x+43,ty=y+30,nameH=square?72:90;
-  const nameHeight=textBox(ctx,p.name.trim()||'Your name',tx,ty,plate.textWidth,nameH,square?49:57,20,B.forest,650,2);
-  let lineY=ty+nameHeight+13;const rule=ctx.createLinearGradient(tx,0,tx+75,0);rule.addColorStop(0,B.gold);rule.addColorStop(1,'#F5CB0300');ctx.fillStyle=rule;ctx.fillRect(tx,lineY-5,75,2);
-  if(p.title.trim()){lineY+=textBox(ctx,p.title.trim(),tx,lineY+9,plate.textWidth,square?38:47,square?23:27,13,B.forest,400,2)+15;}
-  if(p.organization.trim()){textBox(ctx,p.organization.trim(),tx,lineY+8,plate.textWidth,square?38:47,square?21:25,13,'#365242',400,2);}
+  // Fit the participant's details inside the fixed-height nameplate.
+  const tx=x+43, top=y+22, bottom=y+plate.h-18;
+  const fields=[
+    {value:p.name.trim()||'Your name',preferred:square?48:56,minimum:17,weight:650,color:B.forest,maxLines:2},
+    ...(p.title.trim()?[{value:p.title.trim(),preferred:square?22:26,minimum:12,weight:400,color:B.forest,maxLines:2}]:[]),
+    ...(p.organization.trim()?[{value:p.organization.trim(),preferred:square?20:24,minimum:12,weight:400,color:'#365242',maxLines:2}]:[]),
+  ];
+  const available=bottom-top;
+  const lineHeight=(size:number)=>size*1.17;
+  const plan=(factor:number)=>fields.map(field=>{
+    const size=Math.max(field.minimum,Math.floor(field.preferred*factor));
+    const fit=fitText(field.value,plate.textWidth,field.maxLines,size,field.minimum,(value,n)=>{
+      ctx.font=`${field.weight} ${n}px "General Sans"`;
+      return ctx.measureText(value).width;
+    });
+    return {...field,...fit,height:fit.lines.length*lineHeight(fit.size)};
+  });
+  const gap=fields.length>1?8:0;
+  let fitted=plan(1);
+  for(let factor=.98;factor>=.35;factor-=.02){
+    const candidate=plan(factor);
+    fitted=candidate;
+    if(candidate.reduce((sum,field)=>sum+field.height,0)+gap*(fields.length-1)+10<=available)break;
+  }
+  ctx.save();ctx.beginPath();ctx.rect(tx,top,plate.textWidth,available);ctx.clip();
+  let cursor=top;
+  fitted.forEach((field,index)=>{
+    field.lines.forEach((line,lineIndex)=>text(ctx,line,tx,cursor+lineIndex*lineHeight(field.size),field.size,field.color,field.weight));
+    cursor+=field.height;
+    if(index===0&&fitted.length>1){
+      const rule=ctx.createLinearGradient(tx,0,tx+75,0);
+      rule.addColorStop(0,B.gold);rule.addColorStop(1,'#F5CB0300');
+      ctx.fillStyle=rule;ctx.fillRect(tx,cursor+1,75,2);
+    }
+    if(index<fitted.length-1)cursor+=gap;
+  });
+  ctx.restore();
   // Website stays on a quiet strip; the illustration remains to its right.
   ctx.strokeStyle=B.yellow;ctx.lineWidth=2;ctx.beginPath();ctx.arc(89,h-48,14,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.ellipse(89,h-48,6,14,0,0,Math.PI*2);ctx.moveTo(75,h-48);ctx.lineTo(103,h-48);ctx.stroke();
   text(ctx,EVENT.websiteLabel,124,h-59,22,B.white,400);
